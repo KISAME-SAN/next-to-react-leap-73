@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import { Users, GraduationCap, User } from "lucide-react";
-import { getActiveYearId } from "@/lib/years";
-import { getEnrollments } from "@/lib/students";
-import { getAssignedTeacherIds } from "@/lib/teachers";
+import { db } from "@/lib/databaseService";
+import DatabaseStatus from "@/components/DatabaseStatus";
 
 interface Stats {
   students: number;
@@ -16,12 +15,26 @@ export default function Dashboard() {
   useEffect(() => {
     document.title = "Dashboard — École Manager";
 
-    const yearId = getActiveYearId();
-    const enrollments = getEnrollments(yearId);
-    const classes = JSON.parse(localStorage.getItem("classes") || "[]");
-    const teachersAssigned = getAssignedTeacherIds(yearId);
-
-    setStats({ students: enrollments.length, classes: classes.length, teachers: teachersAssigned.length });
+    try {
+      if (db.isHealthy()) {
+        const currentYear = db.getCurrentYear();
+        if (currentYear) {
+          const enrollments = db.students.getEnrollmentsByYear(currentYear.id);
+          const classes = db.classes.getClassesByYear(currentYear.id);
+          const teachers = db.teachers.getAssignedTeachers(currentYear.id);
+          setStats({ students: enrollments.length, classes: classes.length, teachers: teachers.length });
+        }
+      } else {
+        // Fallback to localStorage
+        const yearId = localStorage.getItem("activeYearId") || "2024-2025";
+        const enrollments = JSON.parse(localStorage.getItem(`enrollments__${yearId}`) || "[]");
+        const classes = JSON.parse(localStorage.getItem("classes") || "[]");
+        const teachersAssigned = JSON.parse(localStorage.getItem(`teacherAssignments__${yearId}`) || "[]");
+        setStats({ students: enrollments.length, classes: classes.length, teachers: teachersAssigned.length });
+      }
+    } catch (error) {
+      console.error('Failed to load dashboard stats:', error);
+    }
   }, []);
 
 
@@ -34,6 +47,10 @@ export default function Dashboard() {
   return (
     <div className="animate-fade-in">
       <h1 className="text-3xl font-bold mb-8 animate-slide-up">Dashboard</h1>
+
+      <div className="mb-6">
+        <DatabaseStatus />
+      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         {cards.map((card, index) => {
